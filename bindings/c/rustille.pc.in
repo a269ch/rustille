@@ -1,0 +1,12 @@
+prefix=@PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: rustille
+Description: Turn pixels into Braille - C ABI
+URL: https://github.com/a269ch/rustille
+Version: @VERSION@
+Libs: -L${libdir} -lrustille
+Libs.private: @PRIVATE_LIBS@
+Cflags: -I${includedir}

@@ -1,0 +1,32 @@
+[package]
+name = "rustille-capi"
+description = "C ABI for Rustille: image-to-Braille rendering for any language that can call C."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+# The C ABI ships as a GitHub Release artifact, not as a crates.io crate:
+# nothing downstream consumes it as a Rust dependency.
+publish = false
+
+[lib]
+# Produces librustille.{so,dylib,dll} / librustille.a, matching rustille.h.
+name = "rustille"
+crate-type = ["cdylib", "staticlib"]
+# The lib target shares its name with the core crate so that the artifacts are
+# the ones C users expect; that means rustdoc would collide, and the C API's
+# documentation is the generated header anyway (cbindgen carries every doc
+# comment across as Doxygen).
+doc = false
+
+[features]
+default = ["decode"]
+# Expose rustille_render_bytes / rustille_render_file.
+decode = ["rustille_core/decode"]
+
+[dependencies]
+# Renamed so that this crate's own lib target can be called `rustille` too.
+rustille_core = { package = "rustille", path = "../../crates/rustille", default-features = false }

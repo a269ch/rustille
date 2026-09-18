@@ -1,0 +1,32 @@
+# Deliberately its own workspace: @napi-rs/cli drives this build, and keeping
+# napi out of the root workspace means `cargo test --workspace --all-features`
+# never needs Node symbols to link.
+[workspace]
+
+[package]
+name = "rustille-node"
+description = "Node.js bindings for Rustille"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["Rustille contributors"]
+repository = "https://github.com/a269ch/rustille"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rustille = { path = "../../crates/rustille", default-features = false, features = ["decode"] }
+napi = { version = "3", default-features = false, features = ["napi4"] }
+napi-derive = "3"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

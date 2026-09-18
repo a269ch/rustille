@@ -1,0 +1,41 @@
+# Rustille workspace.
+#
+# Only crates that build with a plain `cargo` invocation are workspace members.
+# The PyO3 / napi-rs / wasm-bindgen bindings live in `bindings/{python,node,wasm}`
+# and are *excluded*: each is its own workspace driven by its own build tool
+# (maturin, @napi-rs/cli, wasm-pack). Keeping them out of this workspace means
+# `cargo test --workspace --all-features` never tries to link libpython or
+# libnode, and FFI-only dependencies never take part in feature unification for
+# the core crate. See CONTRIBUTING.md#workspace-layout.
+[workspace]
+resolver = "3"
+members = ["crates/rustille", "bindings/c"]
+exclude = ["bindings/python", "bindings/node", "bindings/wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["Rustille contributors"]
+repository = "https://github.com/a269ch/rustille"
+homepage = "https://github.com/a269ch/rustille"
+keywords = ["braille", "unicode", "image", "terminal", "ascii-art"]
+categories = ["command-line-utilities", "graphics", "multimedia::images"]
+
+[workspace.dependencies]
+rustille = { version = "0.1.0", path = "crates/rustille", default-features = false }
+thiserror = "2.0"
+image = { version = "0.25", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+# Benchmarks need frame pointers / symbols, so use a dedicated profile.
+[profile.bench]
+inherits = "release"
+strip = "none"
+debug = 1

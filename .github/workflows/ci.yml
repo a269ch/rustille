@@ -1,0 +1,303 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Nothing in CI publishes anything, so read-only is enough. Jobs that need
+# more must ask for it explicitly.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ---------------------------------------------------------------- Rust core
+  rust:
+    name: rust / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --all-features --locked
+
+      - name: Build the CLI and render a test image
+        shell: bash
+        run: |
+          cargo build -p rustille --features cli --locked
+          cargo run -p rustille --features cli --locked --example render_gradient | head -5
+
+      - name: Working tree is clean
+        shell: bash
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "the build left files behind:" >&2
+            git status --porcelain >&2
+            exit 1
+          fi
+
+  # ------------------------------------------------------- Minimum Rust version
+  msrv:
+    name: msrv
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read rust-version from Cargo.toml
+        id: msrv
+        run: |
+          version="$(grep -m1 -E '^rust-version' Cargo.toml | cut -d'"' -f2)"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "MSRV is $version"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-features --locked
+
+  # --------------------------------------------------------- Feature isolation
+  features:
+    name: feature combinations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: No default features (the build bindings use)
+        run: cargo test -p rustille --no-default-features --locked
+      - name: One decoder only
+        run: cargo check -p rustille --no-default-features --features decode-png --locked
+      - name: CLI feature
+        run: cargo check -p rustille --features cli --locked
+
+  # --------------------------------------------------------- Packaging & audit
+  package:
+    name: crates.io package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Version consistency
+        run: ./scripts/check-version.sh
+      - name: Package contents
+        run: |
+          cargo package -p rustille --all-features --locked --list
+          cargo publish --dry-run -p rustille --all-features --locked
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --workspace --all-features
+
+  # -------------------------------------------------------------------- C ABI
+  c:
+    name: c abi / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cbindgen
+      - name: Header, library, and a real C consumer
+        run: ./scripts/build-c-example.sh release
+      - name: Stage the release bundle
+        run: |
+          ./scripts/package-c.sh "$(rustc -vV | sed -n 's|host: ||p')"
+
+  # ------------------------------------------------------------------- Python
+  python:
+    name: python / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: bindings/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bindings/python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the build tools
+        run: python -m pip install --upgrade pip "maturin>=1.7,<2.0" pytest
+
+      - name: Lint the Rust side
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Build an abi3 wheel
+        run: maturin build --release --out dist --locked
+
+      - name: Install the wheel and import it
+        shell: bash
+        run: |
+          python -m pip install --force-reinstall --find-links dist rustille
+          # Import from a directory that contains no source, so the installed
+          # wheel is what gets tested.
+          cd "$(mktemp -d)"
+          python -c "import rustille; print(rustille.__version__); print(rustille.__file__)"
+          python -c "
+          import rustille
+          art = rustille.render_rgba(bytes([255]) * (16 * 16 * 4), width=16, height=16, output_width=8)
+          assert art.splitlines()[0] == '⣿' * 8, art
+          print('smoke test ok')
+          "
+
+      - name: pytest against the installed wheel
+        run: pytest tests -q
+
+  # --------------------------------------------------------------------- Node
+  node:
+    name: node / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: bindings/node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bindings/node
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm install
+      - name: Lint the Rust side
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Build the native addon
+        run: npm run build
+      - name: Runtime tests
+        run: npm test
+
+      - name: Install the packed artifact and run it
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --silent | tail -1)"
+          tarball="$PWD/$tarball"
+          smoke="$(mktemp -d)"
+          cd "$smoke"
+          npm init -y >/dev/null
+          npm install "$tarball" >/dev/null
+          # The platform package is not published yet, so place the freshly
+          # built addon where the loader looks for it first.
+          cp "$OLDPWD"/*.node node_modules/rustille/
+          node -e "
+            const { renderRgba, version } = require('rustille');
+            const art = renderRgba(new Uint8Array(16 * 16 * 4).fill(255), 16, 16, { width: 8 });
+            if (art.split('\n')[0] !== '⣿'.repeat(8)) throw new Error(art);
+            console.log('installed rustille ' + version() + ' works');
+          "
+
+  # --------------------------------------------------------------------- WASM
+  wasm:
+    name: wasm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bindings/wasm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bindings/wasm
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lint the Rust side
+        run: cargo clippy --all-targets --target wasm32-unknown-unknown --locked -- -D warnings
+
+      - name: Build for the web
+        run: wasm-pack build --target web --out-dir pkg --locked
+
+      - name: Build for Node and smoke test it
+        run: |
+          wasm-pack build --target nodejs --out-dir pkg-node --locked
+          node examples/node.mjs ./pkg-node
+
+      - name: Check the generated TypeScript declarations
+        run: |
+          test -f pkg/rustille_wasm.d.ts
+          grep -q "interface RenderOptions" pkg/rustille_wasm.d.ts
+          grep -q "renderRgba" pkg/rustille_wasm.d.ts
+
+      - name: Build without the decoder
+        run: wasm-pack build --target web --out-dir pkg-min --locked -- --no-default-features
+
+  # ------------------------------------------------------------------ Summary
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    needs: [rust, msrv, features, package, deny, c, python, node, wasm]
+    if: always()
+    steps:
+      - name: Fail if any job failed
+        run: |
+          if echo '${{ toJSON(needs) }}' | grep -q '"result": *"failure"'; then
+            echo "at least one job failed" >&2
+            exit 1
+          fi
+          if echo '${{ toJSON(needs) }}' | grep -q '"result": *"cancelled"'; then
+            echo "at least one job was cancelled" >&2
+            exit 1
+          fi
+          echo "all jobs passed"

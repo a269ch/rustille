@@ -1,0 +1,28 @@
+# Deliberately its own workspace: maturin drives this build, and keeping the
+# PyO3 dependency out of the root workspace means `cargo test --workspace
+# --all-features` never has to link against libpython.
+[workspace]
+
+[package]
+name = "rustille-python"
+description = "Python bindings for Rustille"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["Rustille contributors"]
+repository = "https://github.com/a269ch/rustille"
+publish = false
+
+[lib]
+name = "_rustille"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustille = { path = "../../crates/rustille", default-features = false, features = ["decode"] }
+pyo3 = { version = "0.29", features = ["abi3-py39"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

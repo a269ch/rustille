@@ -1,0 +1,43 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "rustille"
+description = "Turn pixels into Braille: image-to-Unicode-Braille rendering and a drawing canvas."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "Rustille contributors" }]
+keywords = ["braille", "unicode", "image", "terminal", "ascii-art"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Rust",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Text Processing",
+    "Typing :: Typed",
+]
+# The version is read from Cargo.toml by maturin, so there is exactly one
+# source of truth per package. scripts/check-version.sh enforces that it
+# matches the git tag.
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/a269ch/rustille"
+Repository = "https://github.com/a269ch/rustille"
+Changelog = "https://github.com/a269ch/rustille/blob/main/CHANGELOG.md"
+
+[tool.maturin]
+python-source = "python"
+module-name = "rustille._rustille"
+features = ["pyo3/extension-module"]
+strip = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

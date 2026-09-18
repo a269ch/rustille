@@ -1,0 +1,64 @@
+{
+  "name": "rustille",
+  "version": "0.1.0",
+  "description": "Turn pixels into Braille: image-to-Unicode-Braille rendering and a drawing canvas.",
+  "keywords": [
+    "braille",
+    "unicode",
+    "image",
+    "terminal",
+    "ascii-art",
+    "napi-rs"
+  ],
+  "homepage": "https://github.com/a269ch/rustille",
+  "bugs": "https://github.com/a269ch/rustille/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/a269ch/rustille.git",
+    "directory": "bindings/node"
+  },
+  "license": "MIT OR Apache-2.0",
+  "author": "Rustille contributors",
+  "type": "commonjs",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "napi": {
+    "binaryName": "rustille",
+    "targets": [
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-musl",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc"
+    ]
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "node --test __test__/",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  }
+}

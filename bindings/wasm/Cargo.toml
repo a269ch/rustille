@@ -1,0 +1,38 @@
+# Deliberately its own workspace: wasm-pack drives this build and the
+# wasm-bindgen dependency has no business in the core crate's lock file.
+[workspace]
+
+[package]
+name = "rustille-wasm"
+description = "WebAssembly bindings for Rustille: turn pixels into Braille in the browser."
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+authors = ["Rustille contributors"]
+repository = "https://github.com/a269ch/rustille"
+homepage = "https://github.com/a269ch/rustille"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["decode"]
+# PNG/JPEG/GIF/BMP/WebP decoding inside WebAssembly. Turn it off for a smaller
+# module when the host already has pixels (canvas, ImageBitmap, <img>).
+decode = ["rustille/decode"]
+
+[dependencies]
+rustille = { path = "../../crates/rustille", default-features = false }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Os", "--enable-bulk-memory"]

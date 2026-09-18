@@ -1,0 +1,629 @@
+name: Release
+
+# Releases are driven entirely by a semver tag:
+#
+#   scripts/set-version.sh 0.2.0 && $EDITOR CHANGELOG.md
+#   git commit -am "release 0.2.0"
+#   git tag v0.2.0 && git push origin main --tags
+#
+# Everything below then runs by itself. Nothing here is reachable from a pull
+# request, so no fork can ever see a credential.
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+jobs:
+  # =========================================================================
+  # 1. Gate. Nothing is built until the tag, the manifests and the test suite
+  #    all agree.
+  # =========================================================================
+  validate:
+    name: validate ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Tag matches every package version
+        id: version
+        run: |
+          ./scripts/check-version.sh "${{ github.ref_name }}"
+          echo "version=${GITHUB_REF_NAME#v}" >>"$GITHUB_OUTPUT"
+
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo test --workspace --all-features --locked
+      - run: cargo doc --workspace --no-deps --all-features --locked
+
+      - name: Validate the crates.io package
+        run: |
+          cargo package -p rustille --all-features --locked --list
+          cargo publish --dry-run -p rustille --all-features --locked
+
+      - name: Upload the verified .crate for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: crate-package
+          path: target/package/*.crate
+          if-no-files-found: error
+
+  # =========================================================================
+  # 2. Build. Every job here produces an artifact that the publish jobs
+  #    consume verbatim; nothing is rebuilt at publish time.
+  # =========================================================================
+  build-cli:
+    name: cli / ${{ matrix.target }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            packages: musl-tools
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            extension: .exe
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            extension: .exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install build dependencies
+        if: matrix.packages
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.packages }}
+
+      - uses: taiki-e/install-action@v2
+        if: matrix.cross
+        with:
+          tool: cross
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build -p rustille --bin rustille --features cli --release --locked --target ${{ matrix.target }}
+          else
+            cargo build -p rustille --bin rustille --features cli --release --locked --target ${{ matrix.target }}
+          fi
+
+      - name: Stage the archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="rustille-${{ github.ref_name }}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/rustille${{ matrix.extension }}" "dist/$name/"
+          cp README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "dist/$name/"
+          cd dist
+          if [ -n "${{ matrix.extension }}" ]; then
+            7z a "$name.zip" "$name" >/dev/null
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+          rm -rf "$name"
+          ls -l
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  build-c:
+    name: c abi / ${{ matrix.target }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `native: true` marks the entries the runner can actually execute,
+          # so the C consumer is compiled and run there. macos-latest is arm64,
+          # so the x86_64 macOS bundle is cross-compiled only.
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            native: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            native: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: capi-${{ matrix.target }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cbindgen
+
+      - name: Install the cross linker
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >>"$GITHUB_ENV"
+
+      - name: Compile a C consumer against the fresh library
+        if: matrix.native
+        run: ./scripts/build-c-example.sh release
+
+      - name: Stage the bundle
+        shell: bash
+        run: ./scripts/package-c.sh "${{ matrix.target }}"
+
+      - name: Archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          name="rustille-c-v$version-${{ matrix.target }}"
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "$name.zip" "$name" >/dev/null
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+          rm -rf "$name"
+          ls -l
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capi-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  build-python:
+    name: wheel / ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: x86_64
+            os: ubuntu-latest
+            manylinux: "2014"
+          - platform: linux
+            arch: aarch64
+            os: ubuntu-latest
+            manylinux: "2014"
+          - platform: macos
+            arch: x86_64
+            os: macos-latest
+          - platform: macos
+            arch: aarch64
+            os: macos-latest
+          - platform: windows
+            arch: x64
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build an abi3 wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: bindings/python
+          target: ${{ matrix.arch }}
+          args: --release --out dist --locked
+          manylinux: ${{ matrix.manylinux || 'auto' }}
+          sccache: "true"
+
+      # The aarch64 Linux wheel cannot run on an x86_64 runner; every other
+      # wheel is installed and exercised before it is allowed near PyPI.
+      - name: Install the wheel and run a smoke test
+        if: "!(matrix.platform == 'linux' && matrix.arch == 'aarch64')"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip pytest
+          python -m pip install --force-reinstall --find-links bindings/python/dist rustille
+          cd "$(mktemp -d)"
+          python -c "import rustille, sys; print(rustille.__version__, rustille.__file__)"
+          python -c "
+          import rustille
+          art = rustille.render_rgba(bytes([255]) * (16 * 16 * 4), width=16, height=16, output_width=8)
+          assert art.splitlines()[0] == '⣿' * 8, art
+          canvas = rustille.Canvas(20, 8)
+          canvas.circle(10, 4, 3)
+          assert canvas.count() > 0
+          print('python smoke test ok')
+          "
+          cd "$GITHUB_WORKSPACE/bindings/python"
+          pytest tests -q
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform }}-${{ matrix.arch }}
+          path: bindings/python/dist/*
+          if-no-files-found: error
+
+  build-python-sdist:
+    name: sdist
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: bindings/python
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: bindings/python/dist/*
+          if-no-files-found: error
+
+  build-node:
+    name: node / ${{ matrix.target }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: bindings/node
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `native: true` marks the addons the runner can dlopen; only those
+          # get the install-and-execute smoke test. macos-latest is arm64 and a
+          # musl addon will not load on a glibc host.
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            native: true
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            packages: musl-tools
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            native: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            native: true
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bindings/node
+          key: ${{ matrix.target }}
+
+      - name: Install build dependencies
+        if: matrix.packages
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.packages }}
+
+      - run: npm install
+
+      - name: Build the native addon
+        run: npx napi build --platform --release --target ${{ matrix.target }} ${{ matrix.cross && '--use-napi-cross' || '' }}
+
+      - name: Runtime tests
+        if: matrix.native
+        run: npm test
+
+      - name: Install the packed artifact and run it
+        if: matrix.native
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$PWD/$(npm pack --silent | tail -1)"
+          smoke="$(mktemp -d)"
+          cd "$smoke"
+          npm init -y >/dev/null
+          npm install "$tarball" >/dev/null
+          cp "$OLDPWD"/*.node node_modules/rustille/
+          node -e "
+            const { renderRgba, version } = require('rustille');
+            const art = renderRgba(new Uint8Array(16 * 16 * 4).fill(255), 16, 16, { width: 8 });
+            if (art.split('\n')[0] !== '⣿'.repeat(8)) throw new Error(art);
+            console.log('installed rustille ' + version() + ' works');
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ matrix.target }}
+          path: bindings/node/*.node
+          if-no-files-found: error
+
+  build-wasm:
+    name: wasm
+    needs: validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bindings/wasm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bindings/wasm
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the published (bundler) package
+        run: wasm-pack build --target bundler --out-dir pkg --locked
+
+      - name: Build for Node and smoke test it
+        run: |
+          wasm-pack build --target nodejs --out-dir pkg-node --locked
+          node examples/node.mjs ./pkg-node
+
+      - name: Check the package metadata
+        run: |
+          node -e "
+            const pkg = require('./pkg/package.json');
+            if (pkg.name !== 'rustille-wasm') throw new Error('unexpected name ' + pkg.name);
+            if (pkg.version !== '${{ needs.validate.outputs.version }}') {
+              throw new Error('package.json says ' + pkg.version);
+            }
+            console.log('wasm package', pkg.name, pkg.version);
+          "
+          test -f pkg/rustille_wasm.d.ts
+
+      - name: Archive the package for the GitHub Release
+        run: tar czf ../../rustille-wasm-${{ github.ref_name }}.tgz pkg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-package
+          path: |
+            bindings/wasm/pkg/**
+            rustille-wasm-${{ github.ref_name }}.tgz
+          if-no-files-found: error
+
+  # =========================================================================
+  # 3. Publish. Each job downloads artifacts that already passed their tests.
+  # =========================================================================
+  github-release:
+    name: github release
+    needs: [validate, build-cli, build-c, build-wasm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "{cli-*,capi-*,wasm-package}"
+
+      - name: Collect the release files
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.tgz' \) \
+            -exec cp {} release/ \;
+          cd release
+          sha256sum * >SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Extract the changelog section
+        id: notes
+        run: |
+          version="${{ needs.validate.outputs.version }}"
+          awk -v version="$version" '
+            $0 ~ "^## \\[?" version "\\]?" { printing = 1; next }
+            printing && /^## / { exit }
+            printing { print }
+          ' CHANGELOG.md >release-notes.md
+          echo "--- release notes ---"
+          cat release-notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Rustille ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: release/*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+
+  publish-crates-io:
+    name: publish crates.io
+    needs: [validate, build-cli, build-c, build-python, build-node, build-wasm]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      # Short-lived OIDC credentials instead of a stored token.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      # crates.io only lets you attach a Trusted Publisher to a crate that
+      # already exists, so the very first release falls back to a token held in
+      # the `release` environment. Delete that secret once the Trusted
+      # Publisher is configured; see RELEASING.md.
+      - name: Mint a short-lived crates.io token (Trusted Publishing)
+        id: auth
+        if: ${{ !secrets.CARGO_REGISTRY_TOKEN }}
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish the rustille crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+        # Only `rustille` is published. rustille-capi, rustille-python,
+        # rustille-node and rustille-wasm are all `publish = false`.
+        run: cargo publish -p rustille --all-features --locked
+
+  publish-pypi:
+    name: publish PyPI
+    needs: [validate, build-python, build-python-sdist]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+      - run: ls -l dist
+      - name: Publish with Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: false
+          print-hash: true
+
+  publish-npm:
+    name: publish npm (native)
+    needs: [validate, build-node]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: bindings/node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # npm Trusted Publishing needs a recent npm.
+      - run: npm install -g npm@latest
+      - run: npm install
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: bindings/node/artifacts
+          pattern: node-*
+          merge-multiple: true
+
+      - name: Lay out the platform packages
+        run: |
+          ls -l artifacts
+          npx napi create-npm-dirs
+          npx napi artifacts --output-dir ./artifacts
+          npx napi prepublish -t npm --skip-gh-release
+          ls -R npm
+
+      # With no NODE_AUTH_TOKEN, npm uses OIDC Trusted Publishing. npm only
+      # lets you attach a Trusted Publisher to a package that already exists,
+      # so the first release falls back to a token; see RELEASING.md.
+      - name: Publish
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          for package in npm/*/; do
+            npm publish "$package" --access public --provenance
+          done
+          npm publish --access public --provenance
+
+  publish-npm-wasm:
+    name: publish npm (wasm)
+    needs: [validate, build-wasm]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-package
+          path: wasm
+
+      - name: Verify the package imports before publishing
+        run: |
+          set -euo pipefail
+          ls -l wasm/bindings/wasm/pkg
+          node -e "
+            const pkg = require('./wasm/bindings/wasm/pkg/package.json');
+            if (pkg.name !== 'rustille-wasm') throw new Error(pkg.name);
+            if (pkg.version !== '${{ needs.validate.outputs.version }}') throw new Error(pkg.version);
+            console.log('publishing', pkg.name, pkg.version);
+          "
+
+      - name: Publish
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish ./wasm/bindings/wasm/pkg --access public --provenance

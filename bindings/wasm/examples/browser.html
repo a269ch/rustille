@@ -1,0 +1,88 @@
+<!doctype html>
+<!--
+  Minimal browser example for rustille-wasm.
+
+    wasm-pack build --target web --out-dir pkg
+    python3 -m http.server      # then open examples/browser.html
+
+  The browser decodes the image; Rustille only ever sees RGBA pixels.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rustille &mdash; turn pixels into Braille</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem auto;
+        max-width: 60rem;
+        padding: 0 1rem;
+      }
+      pre {
+        font-family: "DejaVu Sans Mono", "Menlo", monospace;
+        font-size: 10px;
+        line-height: 1;
+        letter-spacing: 0;
+        overflow-x: auto;
+        background: #111;
+        color: #eee;
+        padding: 1rem;
+      }
+      label {
+        display: inline-block;
+        margin-right: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Rustille</h1>
+    <p>Pick an image; it is decoded by the browser and rendered by WebAssembly.</p>
+
+    <p>
+      <input type="file" id="file" accept="image/*" />
+      <label>width <input type="number" id="width" value="100" min="1" max="400" /></label>
+      <label>threshold <input type="range" id="threshold" min="0" max="255" value="128" /></label>
+      <label><input type="checkbox" id="dither" /> dither</label>
+      <label><input type="checkbox" id="invert" /> invert</label>
+    </p>
+
+    <pre id="output">Loading WebAssembly&hellip;</pre>
+
+    <script type="module">
+      import init, { renderRgba, version } from "../pkg/rustille_wasm.js";
+
+      const output = document.getElementById("output");
+      await init();
+      output.textContent = `rustille-wasm ${version()} ready. Pick an image.`;
+
+      let pixels = null;
+
+      function render() {
+        if (!pixels) return;
+        output.textContent = renderRgba(pixels.data, pixels.width, pixels.height, {
+          width: Number(document.getElementById("width").value),
+          threshold: Number(document.getElementById("threshold").value),
+          dither: document.getElementById("dither").checked ? "floyd-steinberg" : "none",
+          invert: document.getElementById("invert").checked,
+        });
+      }
+
+      document.getElementById("file").addEventListener("change", async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const bitmap = await createImageBitmap(file);
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext("2d");
+        context.drawImage(bitmap, 0, 0);
+        pixels = context.getImageData(0, 0, bitmap.width, bitmap.height);
+        render();
+      });
+
+      for (const id of ["width", "threshold", "dither", "invert"]) {
+        document.getElementById(id).addEventListener("input", render);
+      }
+    </script>
+  </body>
+</html>
