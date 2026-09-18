@@ -109,6 +109,7 @@ pub fn assert_golden(name: &str, actual: &str) {
             path.display()
         )
     });
+    let expected = expected.replace("\r\n", "\n");
     assert_eq!(
         actual,
         expected.trim_end_matches('\n'),
