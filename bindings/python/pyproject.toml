@@ -23,9 +23,6 @@ classifiers = [
     "Topic :: Text Processing",
     "Typing :: Typed",
 ]
-# The version is read from Cargo.toml by maturin, so there is exactly one
-# source of truth per package. scripts/check-version.sh enforces that it
-# matches the git tag.
 dynamic = ["version"]
 
 [project.urls]

@@ -181,7 +181,6 @@ pub fn resolve_color(arg: ColorArg, env: &ColorEnvironment) -> ColorMode {
         ColorArg::Ansi256 => ColorMode::Ansi256,
         ColorArg::Truecolor => ColorMode::TrueColor,
         ColorArg::Always => match env.best_depth() {
-            // `--color always` on a dumb terminal still means "colour".
             ColorMode::None => ColorMode::Ansi256,
             depth => depth,
         },
@@ -226,8 +225,6 @@ pub fn build_options(
     if options.width.is_none() && options.height.is_none() {
         if let Some((columns, rows)) = terminal_size {
             options.width = Some(columns.max(1));
-            // Leave one row for the shell prompt. Only `contain` gets a height
-            // box: the other fit modes would use it to crop or stretch.
             if fit == Fit::Contain {
                 options.height = Some(rows.saturating_sub(1).max(1));
             }

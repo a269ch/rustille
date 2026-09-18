@@ -11,8 +11,6 @@ repository.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
-# Tests and benchmarks are not useful to downstream consumers and would
-# otherwise inflate the published .crate file.
 exclude = ["tests/**", "benches/**"]
 
 [lib]
@@ -27,9 +25,6 @@ required-features = ["cli"]
 [features]
 default = ["decode"]
 
-# Image decoding. `decode` turns on every format Rustille ships with; the
-# per-format features exist so downstream crates can keep their dependency
-# tree (and wasm binaries) small.
 decode = [
     "decode-png",
     "decode-jpeg",
@@ -45,10 +40,8 @@ decode-bmp = ["_image", "image/bmp"]
 decode-gif = ["_image", "image/gif"]
 decode-tiff = ["_image", "image/tiff"]
 
-# Everything the `rustille` binary needs. Library consumers never pay for it.
 cli = ["decode", "dep:clap", "dep:anyhow", "dep:terminal_size"]
 
-# Internal: "the `image` crate is available". Not part of the public API.
 _image = ["dep:image"]
 
 [dependencies]
@@ -60,8 +53,6 @@ terminal_size = { version = "0.4", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
-# Encoders, so that tests can synthesise their own fixtures instead of shipping
-# opaque binary blobs.
 image = { workspace = true, features = ["png", "jpeg", "bmp", "gif", "tiff"] }
 
 [[bench]]

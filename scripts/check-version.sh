@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
-# Verifies that every package in the repository carries the same version, and
-# optionally that it matches a release tag.
-#
-#   scripts/check-version.sh            # internal consistency only
-#   scripts/check-version.sh v0.1.0     # ... and that it matches the tag
-#
-# The release workflow runs this before anything is built or published, so a
-# mismatch can never reach a registry.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,13 +8,11 @@ fail() {
     exit 1
 }
 
-# First `version = "x.y.z"` in a TOML file.
 toml_version() {
     local file="$1"
     grep -m1 -E '^version[[:space:]]*=' "$file" | cut -d'"' -f2
 }
 
-# `"version": "x.y.z"` in a package.json.
 json_version() {
     local file="$1"
     grep -m1 -E '"version"[[:space:]]*:' "$file" | cut -d'"' -f4
@@ -45,8 +35,6 @@ record "bindings/node/Cargo.toml"      "$(toml_version "$root/bindings/node/Carg
 record "bindings/node/package.json"    "$(json_version "$root/bindings/node/package.json")"
 record "bindings/wasm/Cargo.toml"      "$(toml_version "$root/bindings/wasm/Cargo.toml")"
 
-# The C header carries the version as a macro so that a consumer can compare it
-# against rustille_version() at runtime.
 header_version="$(grep -m1 -E '^#define RUSTILLE_VERSION ' "$root/bindings/c/cbindgen.toml" | cut -d'"' -f2)"
 record "bindings/c/cbindgen.toml"      "$header_version"
 
@@ -68,8 +56,6 @@ for index in "${!names[@]}"; do
     fi
 done
 
-# crates/rustille and bindings/c inherit `version.workspace = true`; make sure
-# nobody has pinned them to something else.
 for manifest in "$root/crates/rustille/Cargo.toml" "$root/bindings/c/Cargo.toml"; do
     if ! grep -qE '^version\.workspace[[:space:]]*=[[:space:]]*true' "$manifest"; then
         echo "  MISMATCH ${manifest#"$root"/}: expected 'version.workspace = true'" >&2

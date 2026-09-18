@@ -103,8 +103,6 @@ pub const fn dot_number_bit(dot: u32) -> Option<u8> {
 #[inline]
 #[must_use]
 pub const fn char_for_mask(mask: u8) -> char {
-    // INVARIANT: 0x2800 + 0..=0xFF stays inside the Braille Patterns block,
-    // which contains no surrogates, so the conversion is always valid.
     match char::from_u32(BRAILLE_BASE + mask as u32) {
         Some(c) => c,
         None => BLANK,
@@ -187,7 +185,6 @@ mod tests {
                 c as u32
             );
             assert_eq!(mask_for_char(c), Some(mask));
-            // Every Braille character is three bytes of UTF-8.
             assert_eq!(c.len_utf8(), 3);
         }
     }
@@ -205,7 +202,6 @@ mod tests {
 
     #[test]
     fn dot_numbers_match_coordinates() {
-        // dot number -> (x, y) per the Unicode Braille layout.
         let expected = [
             (1u32, 0u32, 0u32),
             (2, 0, 1),

@@ -158,7 +158,6 @@ mod tests {
         let mut plane = vec![100.0f32; 64 * 64];
         dither_plane(&mut plane, 64, 64, 128, Dither::FloydSteinberg);
         let mean = plane.iter().sum::<f32>() / plane.len() as f32;
-        // Error diffusion should land close to the original mean.
         assert!((mean - 100.0).abs() < 8.0, "mean was {mean}");
     }
 

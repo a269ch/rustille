@@ -6,8 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Nothing in CI publishes anything, so read-only is enough. Jobs that need
-# more must ask for it explicitly.
 permissions:
   contents: read
 
@@ -21,7 +19,6 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # ---------------------------------------------------------------- Rust core
   rust:
     name: rust / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -54,8 +51,6 @@ jobs:
         shell: bash
         run: |
           cargo build -p rustille --features cli --locked
-          # Not piped into `head`: the example would die on SIGPIPE and,
-          # under `bash -o pipefail`, take the job down with it.
           cargo run -p rustille --features cli --locked --example render_gradient > gradient.txt
           head -5 gradient.txt
           rm gradient.txt
@@ -69,7 +64,6 @@ jobs:
             exit 1
           fi
 
-  # ------------------------------------------------------- Minimum Rust version
   msrv:
     name: msrv
     runs-on: ubuntu-latest
@@ -87,7 +81,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-features --locked
 
-  # --------------------------------------------------------- Feature isolation
   features:
     name: feature combinations
     runs-on: ubuntu-latest
@@ -102,7 +95,6 @@ jobs:
       - name: CLI feature
         run: cargo check -p rustille --features cli --locked
 
-  # --------------------------------------------------------- Packaging & audit
   package:
     name: crates.io package
     runs-on: ubuntu-latest
@@ -127,7 +119,6 @@ jobs:
           command: check
           arguments: --workspace --all-features
 
-  # -------------------------------------------------------------------- C ABI
   c:
     name: c abi / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -148,7 +139,6 @@ jobs:
         run: |
           ./scripts/package-c.sh "$(rustc -vV | sed -n 's|host: ||p')"
 
-  # ------------------------------------------------------------------- Python
   python:
     name: python / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -182,8 +172,6 @@ jobs:
         shell: bash
         run: |
           python -m pip install --force-reinstall --find-links dist rustille
-          # Import from a directory that contains no source, so the installed
-          # wheel is what gets tested.
           cd "$(mktemp -d)"
           python -c "import rustille; print(rustille.__version__); print(rustille.__file__)"
           python -c "
@@ -196,7 +184,6 @@ jobs:
       - name: pytest against the installed wheel
         run: pytest tests -q
 
-  # --------------------------------------------------------------------- Node
   node:
     name: node / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -235,8 +222,6 @@ jobs:
           cd "$smoke"
           npm init -y >/dev/null
           npm install "$tarball" >/dev/null
-          # The platform package is not published yet, so place the freshly
-          # built addon where the loader looks for it first.
           cp "$OLDPWD"/*.node node_modules/rustille/
           node -e "
             const { renderRgba, version } = require('rustille');
@@ -245,7 +230,6 @@ jobs:
             console.log('installed rustille ' + version() + ' works');
           "
 
-  # --------------------------------------------------------------------- WASM
   wasm:
     name: wasm
     runs-on: ubuntu-latest
@@ -287,7 +271,6 @@ jobs:
       - name: Build without the decoder
         run: wasm-pack build --target web --out-dir pkg-min --locked -- --no-default-features
 
-  # ------------------------------------------------------------------ Summary
   ci:
     name: ci
     runs-on: ubuntu-latest

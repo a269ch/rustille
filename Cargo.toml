@@ -1,12 +1,3 @@
-# Rustille workspace.
-#
-# Only crates that build with a plain `cargo` invocation are workspace members.
-# The PyO3 / napi-rs / wasm-bindgen bindings live in `bindings/{python,node,wasm}`
-# and are *excluded*: each is its own workspace driven by its own build tool
-# (maturin, @napi-rs/cli, wasm-pack). Keeping them out of this workspace means
-# `cargo test --workspace --all-features` never tries to link libpython or
-# libnode, and FFI-only dependencies never take part in feature unification for
-# the core crate. See CONTRIBUTING.md#workspace-layout.
 [workspace]
 resolver = "3"
 members = ["crates/rustille", "bindings/c"]
@@ -34,7 +25,6 @@ lto = "thin"
 codegen-units = 1
 strip = "symbols"
 
-# Benchmarks need frame pointers / symbols, so use a dedicated profile.
 [profile.bench]
 inherits = "release"
 strip = "none"

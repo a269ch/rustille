@@ -219,7 +219,6 @@ impl FromStr for Background {
         }
 
         let hex = raw.strip_prefix('#').unwrap_or(raw);
-        // `#abc` is shorthand for `#aabbcc`.
         let expanded = match hex.len() {
             3 if hex.is_ascii() => Some(hex.chars().flat_map(|c| [c, c]).collect::<String>()),
             6 if hex.is_ascii() => Some(hex.to_owned()),

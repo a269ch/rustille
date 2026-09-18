@@ -60,7 +60,6 @@ pub fn transparent(width: u32, height: u32) -> RgbaImage {
 pub fn encode(image: &RgbaImage, format: ImageFormat) -> Vec<u8> {
     let mut bytes = Vec::new();
     let dynamic = image::DynamicImage::ImageRgba8(image.clone());
-    // JPEG, BMP, GIF and TIFF cannot all store an alpha channel.
     let dynamic = match format {
         ImageFormat::Jpeg | ImageFormat::Bmp | ImageFormat::Tiff => {
             image::DynamicImage::ImageRgb8(dynamic.to_rgb8())

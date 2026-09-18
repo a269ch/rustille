@@ -80,7 +80,6 @@ impl Surface {
                     for channel in 0..RGB_CHANNELS {
                         let source = u32::from(chunk[channel]) * alpha;
                         let under = u32::from(background[channel]) * inverse;
-                        // Rounded division by 255.
                         out[base + channel] = ((source + under + 127) / 255) as u8;
                     }
                 }
@@ -158,7 +157,6 @@ impl Surface {
         let horizontal = AxisMap::new(self.width, width);
         let vertical = AxisMap::new(self.height, height);
 
-        // Pass 1: horizontal, u8 -> f32.
         let mut intermediate = vec![0f32; width as usize * self.height as usize * RGB_CHANNELS];
         for row in 0..self.height as usize {
             let src_row = row * self.width as usize * RGB_CHANNELS;
@@ -178,7 +176,6 @@ impl Surface {
             }
         }
 
-        // Pass 2: vertical, f32 -> u8.
         let mut out = vec![0u8; pixels * RGB_CHANNELS];
         let stride = width as usize * RGB_CHANNELS;
         for target_row in 0..height as usize {
@@ -234,7 +231,6 @@ impl AxisMap {
             let offset = weights.len();
             offsets.push(offset as u32);
             if target >= source {
-                // Linear interpolation between the two nearest source samples.
                 let center = (f64::from(index) + 0.5) * scale - 0.5;
                 let left = center.floor();
                 let fraction = (center - left) as f32;
@@ -250,12 +246,10 @@ impl AxisMap {
                     weights.push(1.0 - fraction);
                     weights.push(fraction);
                 } else {
-                    // `first` was clamped away from `second`; fall back to one tap.
                     counts.push(1);
                     weights.push(1.0);
                 }
             } else {
-                // Area average over the source interval this target covers.
                 let begin = f64::from(index) * scale;
                 let end = begin + scale;
                 let first = begin.floor() as u32;
@@ -403,7 +397,6 @@ mod tests {
 
     #[test]
     fn downscale_averages() {
-        // Two black pixels and two white ones collapse to mid grey.
         let surface = Surface::from_luma(2, 2, &[0, 255, 255, 0]).unwrap();
         let resized = surface.resize(1, 1).unwrap();
         assert_eq!(resized.width(), 1);

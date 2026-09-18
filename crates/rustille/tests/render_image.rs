@@ -32,8 +32,6 @@ fn every_bundled_format_decodes_to_the_same_art() {
         ImageFormat::Tiff,
         ImageFormat::WebP,
     ] {
-        // WebP encoding is not part of the `image` crate's lossless-only
-        // encoder set for every version, so skip formats we cannot produce.
         let Ok(bytes) = std::panic::catch_unwind(|| common::encode(&source, format)) else {
             continue;
         };
@@ -41,7 +39,6 @@ fn every_bundled_format_decodes_to_the_same_art() {
         assert_eq!(rendered, png, "{format:?} decoded differently");
     }
 
-    // JPEG is lossy, so only the shape is guaranteed.
     let jpeg = render_bytes(&common::encode(&source, ImageFormat::Jpeg), &options).unwrap();
     assert_eq!(jpeg.lines().count(), png.lines().count());
 }
@@ -169,12 +166,10 @@ fn aspect_ratio_is_preserved_by_default() {
     let image = common::checkerboard(200, 100, 10);
     let rgba = image.as_raw();
 
-    // 2:1 image, default 2.0 cell ratio: 40 columns -> 10 rows.
     let rendered = render_rgba(200, 100, rgba, &RenderOptions::default().width(40)).unwrap();
     assert_eq!(rendered.lines().count(), 10);
     assert!(rendered.lines().all(|l| l.chars().count() == 40));
 
-    // Square cells double the row count.
     let square = render_rgba(
         200,
         100,
@@ -218,8 +213,6 @@ fn plain_output_is_free_of_escape_sequences() {
 #[test]
 fn colour_output_is_well_formed() {
     let bytes = common::encode(&common::rgb_bands(24, 24), ImageFormat::Png);
-    // Pure blue has a luminance of only 18, so drop the threshold far enough
-    // that every band lights up and carries a colour.
     let base = RenderOptions::default()
         .size(3, 1)
         .fit(Fit::Stretch)
@@ -246,7 +239,6 @@ fn colour_output_is_well_formed() {
     assert!(ansi.contains("\x1b[38;5;"));
     assert!(!ansi.contains("\x1b[38;2;"));
 
-    // Stripping the escapes must leave exactly the plain rendering.
     let plain = render_bytes(&bytes, &base).unwrap();
     assert_eq!(strip_ansi(&truecolor), plain);
     assert_eq!(strip_ansi(&ansi), plain);
@@ -275,7 +267,6 @@ fn malformed_input_is_reported_not_panicked() {
     let cases: [&[u8]; 4] = [
         b"",
         b"not an image at all",
-        // A PNG magic number followed by garbage.
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00garbage",
         &[0xFF; 64],
     ];
@@ -323,13 +314,11 @@ fn zero_dimensions_are_rejected() {
 
 #[test]
 fn extreme_but_valid_sizes_still_render() {
-    // A one-pixel-tall panorama.
     let wide = vec![255u8; 4096 * 4];
     let rendered = render_rgba(4096, 1, &wide, &RenderOptions::default().width(512)).unwrap();
     assert_eq!(rendered.lines().count(), 1);
     assert_eq!(rendered.chars().count(), 512);
 
-    // A one-pixel-wide column.
     let tall = vec![255u8; 4096 * 4];
     let rendered = render_rgba(1, 4096, &tall, &RenderOptions::default().height(256)).unwrap();
     assert_eq!(rendered.lines().count(), 256);
@@ -351,7 +340,6 @@ fn absurd_sizes_fail_before_allocating() {
 
 #[test]
 fn upscaling_a_tiny_image_works() {
-    // 2x2 pixels blown up to 20 columns.
     let pixels = [
         255, 255, 255, 255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255,
     ];

@@ -247,8 +247,6 @@ impl Canvas {
     }
 
     fn plot_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, value: bool) {
-        // Integer Bresenham, written for the general case: the error term
-        // tracks twice the distance to the ideal line so no division is needed.
         let dx = (x1 - x0).abs();
         let dy = -(y1 - y0).abs();
         let step_x = if x0 < x1 { 1 } else { -1 };
@@ -294,8 +292,6 @@ impl Canvas {
     pub fn filled_rectangle(&mut self, x0: i32, y0: i32, x1: i32, y1: i32) {
         let (left, right) = (x0.min(x1), x0.max(x1));
         let (top, bottom) = (y0.min(y1), y0.max(y1));
-        // Clamp before iterating so a rectangle far outside the canvas does not
-        // cost a billion no-op writes.
         let left = left.max(0);
         let top = top.max(0);
         let right = right.min(self.width.saturating_sub(1) as i32);
@@ -375,7 +371,6 @@ impl Canvas {
         if self.cells.is_empty() {
             return;
         }
-        // Every Braille character is 3 bytes of UTF-8, plus one newline per row.
         let rows = self.cells_height as usize;
         let columns = self.cells_width as usize;
         out.reserve(rows * (columns * 3 + 1));
@@ -506,7 +501,6 @@ mod tests {
 
     #[test]
     fn fill_respects_partial_edge_cells() {
-        // 3x2 dots occupies a 2x1 cell grid; only 6 of the 16 dots are real.
         let mut canvas = Canvas::new(3, 2);
         canvas.fill();
         assert_eq!(canvas.count(), 6);
@@ -646,7 +640,6 @@ mod tests {
 
     #[test]
     fn extreme_but_valid_canvas_works() {
-        // 2 dots wide, a million tall: 1 column x 250_000 rows of characters.
         let mut canvas = Canvas::new(2, 1_000_000);
         assert_eq!(canvas.cells_height(), 250_000);
         canvas.set(1, 999_999);

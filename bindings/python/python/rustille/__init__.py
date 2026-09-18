@@ -56,13 +56,9 @@ __all__ = [
     "render_rgba",
 ]
 
-#: Width in characters used when neither ``width`` nor ``height`` is given.
 DEFAULT_WIDTH = 80
-#: Luminance at or above which a dot is drawn.
 DEFAULT_THRESHOLD = 128
-#: Physical height/width ratio of one terminal character cell.
 DEFAULT_CELL_ASPECT_RATIO = 2.0
-
 
 def _as_bytes(data: object) -> bytes:
     """Accepts any bytes-like object, copying only when it is not ``bytes``."""
@@ -74,7 +70,6 @@ def _as_bytes(data: object) -> bytes:
         raise TypeError(
             f"expected a bytes-like object, got {type(data).__name__}"
         ) from error
-
 
 def render_file(
     path,
@@ -120,7 +115,6 @@ def render_file(
         cell_aspect_ratio=cell_aspect_ratio,
     )
 
-
 def render_bytes(
     data,
     *,
@@ -151,7 +145,6 @@ def render_bytes(
         fit=fit,
         cell_aspect_ratio=cell_aspect_ratio,
     )
-
 
 def _raw_renderer(native, channels, kind):
     def render(
@@ -197,7 +190,6 @@ def _raw_renderer(native, channels, kind):
     The remaining keyword arguments are those of :func:`render_file`.
     """
     return render
-
 
 render_rgba = _raw_renderer(_render_rgba, 4, "rgba")
 render_rgb = _raw_renderer(_render_rgb, 3, "rgb")

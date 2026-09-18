@@ -24,7 +24,6 @@ fn run(args: &[&str], stdin: Option<&[u8]>) -> Output {
     let mut command = Command::new(BIN);
     command
         .args(args)
-        // Keep the tests independent of whatever terminal ran them.
         .env_remove("COLORTERM")
         .env_remove("NO_COLOR")
         .env("TERM", "xterm-256color")
@@ -145,7 +144,6 @@ fn colour_is_off_when_piped_and_on_when_forced() {
     let path = common::write_fixture("cli-colour.png", &sample_png());
     let file = path.to_str().unwrap();
 
-    // stdout is a pipe here, so `auto` must stay plain.
     let auto = run(&[file, "--width", "10"], None);
     assert!(!auto.stdout.contains('\u{1b}'));
 

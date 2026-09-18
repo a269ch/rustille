@@ -27,7 +27,6 @@ fn the_documented_example_behaves() {
 
 #[test]
 fn dimensions_round_up_and_edges_stay_inside() {
-    // 3x3 dots -> 2x1 cells, with 10 of the 16 dot slots unused.
     let mut canvas = Canvas::new(3, 3);
     assert_eq!((canvas.cells_width(), canvas.cells_height()), (2, 1));
     canvas.fill();

@@ -1,8 +1,3 @@
-// Runtime tests for the native Node.js package.
-//
-// They import the built package exactly as a consumer would, so they verify
-// the artifact rather than the Rust sources.
-
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -136,7 +131,6 @@ test("options change the output", () => {
   const plain = renderBytes(checkerboard, { width: 8 });
   assert.notEqual(renderBytes(checkerboard, { width: 8, invert: true }), plain);
 
-  // The fixture is pure black and white, so only threshold 0 lights every dot.
   const allLit = renderBytes(checkerboard, { width: 8, threshold: 0 });
   assert.ok([...allLit].every((c) => c === FULL || c === "\n"));
 

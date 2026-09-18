@@ -1,13 +1,5 @@
 name: Release
 
-# Releases are driven entirely by a semver tag:
-#
-#   scripts/set-version.sh 0.2.0 && $EDITOR CHANGELOG.md
-#   git commit -am "release 0.2.0"
-#   git tag v0.2.0 && git push origin main --tags
-#
-# Everything below then runs by itself. Nothing here is reachable from a pull
-# request, so no fork can ever see a credential.
 on:
   push:
     tags:
@@ -27,10 +19,6 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # =========================================================================
-  # 1. Gate. Nothing is built until the tag, the manifests and the test suite
-  #    all agree.
-  # =========================================================================
   validate:
     name: validate ${{ github.ref_name }}
     runs-on: ubuntu-latest
@@ -66,10 +54,6 @@ jobs:
           path: target/package/*.crate
           if-no-files-found: error
 
-  # =========================================================================
-  # 2. Build. Every job here produces an artifact that the publish jobs
-  #    consume verbatim; nothing is rebuilt at publish time.
-  # =========================================================================
   build-cli:
     name: cli / ${{ matrix.target }}
     needs: validate
@@ -157,9 +141,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # `native: true` marks the entries the runner can actually execute,
-          # so the C consumer is compiled and run there. macos-latest is arm64,
-          # so the x86_64 macOS bundle is cross-compiled only.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             native: true
@@ -261,8 +242,6 @@ jobs:
           manylinux: ${{ matrix.manylinux || 'auto' }}
           sccache: "true"
 
-      # The aarch64 Linux wheel cannot run on an x86_64 runner; every other
-      # wheel is installed and exercised before it is allowed near PyPI.
       - name: Install the wheel and run a smoke test
         if: "!(matrix.platform == 'linux' && matrix.arch == 'aarch64')"
         shell: bash
@@ -318,9 +297,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # `native: true` marks the addons the runner can dlopen; only those
-          # get the install-and-execute smoke test. macos-latest is arm64 and a
-          # musl addon will not load on a glibc host.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             native: true
@@ -446,9 +422,6 @@ jobs:
             rustille-wasm-${{ github.ref_name }}.tgz
           if-no-files-found: error
 
-  # =========================================================================
-  # 3. Publish. Each job downloads artifacts that already passed their tests.
-  # =========================================================================
   github-release:
     name: github release
     needs: [validate, build-cli, build-c, build-wasm]
@@ -500,20 +473,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     permissions:
-      # Short-lived OIDC credentials instead of a stored token.
       id-token: write
     env:
-      # The `secrets` context is not available in a step-level `if`, so the
-      # bootstrap token is hoisted here and the step tests `env` instead.
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
 
-      # crates.io only lets you attach a Trusted Publisher to a crate that
-      # already exists, so the very first release falls back to a token held in
-      # the `release` environment. Delete that secret once the Trusted
-      # Publisher is configured; see RELEASING.md.
       - name: Mint a short-lived crates.io token (Trusted Publishing)
         id: auth
         if: env.CARGO_REGISTRY_TOKEN == ''
@@ -522,8 +488,6 @@ jobs:
       - name: Publish the rustille crate
         env:
           CARGO_REGISTRY_TOKEN: ${{ env.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
-        # Only `rustille` is published. rustille-capi, rustille-python,
-        # rustille-node and rustille-wasm are all `publish = false`.
         run: cargo publish -p rustille --all-features --locked
 
   publish-pypi:
@@ -564,7 +528,6 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
-      # npm Trusted Publishing needs a recent npm.
       - run: npm install -g npm@latest
       - run: npm install
 
@@ -582,9 +545,6 @@ jobs:
           npx napi prepublish -t npm --skip-gh-release
           ls -R npm
 
-      # With no NODE_AUTH_TOKEN, npm uses OIDC Trusted Publishing. npm only
-      # lets you attach a Trusted Publisher to a package that already exists,
-      # so the first release falls back to a token; see RELEASING.md.
       - name: Publish
         env:
           NPM_CONFIG_PROVENANCE: "true"

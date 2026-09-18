@@ -171,8 +171,6 @@ impl Renderer {
         let (cells_width, cells_height) =
             resolve_target(surface.width(), surface.height(), options)?;
 
-        // `Fit::Fill` covers the box and crops the overflow; the other modes
-        // already produced a box the source maps onto exactly.
         let source = match options.fit {
             Fit::Fill => cover_crop(
                 surface,
@@ -223,9 +221,6 @@ fn pack_cells(
     let cut = f32::from(options.threshold);
     let dots_width = cells_width as usize * braille::CELL_WIDTH as usize;
 
-    // 3 bytes per Braille character, plus at most one escape per cell, plus a
-    // newline and a reset per row. Sized up front so the hot loop never grows
-    // the buffer.
     let per_cell = 3 + color::escape_budget(color_mode);
     let per_row = cells_width as usize * per_cell + 1 + RESET.len();
     let mut out = String::with_capacity(cells_height as usize * per_row);
@@ -289,7 +284,6 @@ fn cover_crop(surface: &Surface, cells_width: u32, cells_height: u32, cell_aspec
         return surface.clone();
     }
     if source_aspect > box_aspect {
-        // Source is too wide: keep the full height, trim the sides.
         let width =
             ((f64::from(surface.height()) * box_aspect).round() as u32).clamp(1, surface.width());
         let x = (surface.width() - width) / 2;
@@ -320,7 +314,6 @@ fn resolve_target(
 
     let aspect = f64::from(source_width) / f64::from(source_height);
     let cell_aspect = f64::from(options.cell_aspect_ratio);
-    // Cells tall for a given number of cells wide, preserving the image aspect.
     let height_for = |width: u32| -> u32 {
         ((f64::from(width) / (aspect * cell_aspect)).round() as i64).clamp(1, i64::from(u32::MAX))
             as u32
@@ -466,7 +459,6 @@ mod tests {
 
     #[test]
     fn each_dot_position_maps_to_the_right_bit() {
-        // A 2x4 image with exactly one white pixel must light exactly one dot.
         for y in 0..4u32 {
             for x in 0..2u32 {
                 let mut pixels = [0u8; 8];
@@ -501,9 +493,7 @@ mod tests {
     #[test]
     fn aspect_ratio_drives_the_derived_dimension() {
         let renderer = Renderer::new(options().width(40));
-        // A square image at the default 2.0 cell ratio is half as many rows.
         assert_eq!(renderer.output_size(100, 100).unwrap(), (40, 20));
-        // Twice as wide as tall -> a quarter of the rows.
         assert_eq!(renderer.output_size(200, 100).unwrap(), (40, 10));
 
         let square_cells = Renderer::new(options().width(40).cell_aspect_ratio(1.0));
@@ -533,7 +523,6 @@ mod tests {
 
     #[test]
     fn contain_shrinks_the_other_axis_too() {
-        // A tall image in a wide box must lose width, not gain height.
         let contain = Renderer::new(options().size(80, 10).fit(Fit::Contain));
         let (w, h) = contain.output_size(100, 400).unwrap();
         assert_eq!(h, 10);
@@ -542,7 +531,6 @@ mod tests {
 
     #[test]
     fn fill_crops_instead_of_squashing() {
-        // Left half white, right half black; a square box must keep the split.
         let mut rgb = vec![0u8; 8 * 4 * 3];
         for y in 0..4 {
             for x in 0..4 {
@@ -592,7 +580,6 @@ mod tests {
         .unwrap();
         assert!(out.contains("\x1b[38;2;255;255;255m"));
         assert_eq!(out.matches(RESET).count(), 2);
-        // The colour is emitted once per row, not once per cell.
         assert_eq!(out.matches("\x1b[38;2;").count(), 2);
     }
 

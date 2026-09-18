@@ -1,8 +1,3 @@
-# cbindgen configuration for the Rustille C ABI.
-#
-# The header is generated, not committed: `just c-header` (or the CI job)
-# writes it to bindings/c/include/rustille.h.
-
 language = "C"
 header = """/*
  * rustille.h - C ABI for Rustille (https://github.com/a269ch/rustille)

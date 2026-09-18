@@ -180,8 +180,6 @@ thread_local! {
 }
 
 fn set_last_error(message: &str) {
-    // Interior NULs cannot survive a C string; replace them rather than lose
-    // the whole message.
     let sanitized = message.replace('\0', " ");
     let value = CString::new(sanitized).ok();
     LAST_ERROR.with(|slot| *slot.borrow_mut() = value);
@@ -227,8 +225,6 @@ fn deliver(result: rustille_core::Result<String>, out: *mut *mut c_char) -> Rust
     match result {
         Ok(text) => match CString::new(text) {
             Ok(c_string) => {
-                // SAFETY: `out` was checked for null by the caller of this
-                // helper, and points to a writable `char *`.
                 unsafe { *out = c_string.into_raw() };
                 clear_last_error();
                 RustilleStatus::Ok
@@ -306,8 +302,6 @@ pub unsafe extern "C" fn rustille_options_init(options: *mut RustilleOptions) ->
         return RustilleStatus::NullPointer;
     }
     guard(|| {
-        // SAFETY: checked non-null above; the caller guarantees it is writable
-        // and correctly aligned.
         unsafe { options.write(RustilleOptions::default()) };
         RustilleStatus::Ok
     })
@@ -328,8 +322,6 @@ pub unsafe extern "C" fn rustille_string_free(text: *mut c_char) {
         return;
     }
     guard_unit(|| {
-        // SAFETY: the caller guarantees this pointer came from
-        // `CString::into_raw` in this library and has not been freed.
         drop(unsafe { CString::from_raw(text) });
     });
 }
@@ -352,8 +344,6 @@ unsafe fn render_raw(
         return RustilleStatus::NullPointer;
     }
     guard(|| {
-        // SAFETY: non-null checked above; the caller guarantees `data` covers
-        // `len` bytes and `options` points to an initialised struct.
         let (bytes, raw_options) = unsafe {
             (
                 std::slice::from_raw_parts(data, len),
@@ -383,7 +373,6 @@ pub unsafe extern "C" fn rustille_render_rgba(
     options: *const RustilleOptions,
     out: *mut *mut c_char,
 ) -> RustilleStatus {
-    // SAFETY: forwarded unchanged; the caller upholds this function's contract.
     unsafe {
         render_raw(
             data,
@@ -411,7 +400,6 @@ pub unsafe extern "C" fn rustille_render_rgb(
     options: *const RustilleOptions,
     out: *mut *mut c_char,
 ) -> RustilleStatus {
-    // SAFETY: forwarded unchanged; the caller upholds this function's contract.
     unsafe {
         render_raw(
             data,
@@ -439,7 +427,6 @@ pub unsafe extern "C" fn rustille_render_luma(
     options: *const RustilleOptions,
     out: *mut *mut c_char,
 ) -> RustilleStatus {
-    // SAFETY: forwarded unchanged; the caller upholds this function's contract.
     unsafe {
         render_raw(
             data,
@@ -481,7 +468,6 @@ pub unsafe extern "C" fn rustille_render_bytes(
     }
     #[cfg(feature = "decode")]
     guard(|| {
-        // SAFETY: non-null checked above; the caller guarantees the ranges.
         let (bytes, raw_options) = unsafe {
             (
                 std::slice::from_raw_parts(data, len),
@@ -519,7 +505,6 @@ pub unsafe extern "C" fn rustille_render_file(
     }
     #[cfg(feature = "decode")]
     guard(|| {
-        // SAFETY: non-null checked above; the caller guarantees NUL termination.
         let (path, raw_options) =
             unsafe { (CStr::from_ptr(path), &*options.cast::<RustilleOptions>()) };
         let path = match path.to_str() {
@@ -569,7 +554,6 @@ pub unsafe extern "C" fn rustille_canvas_free(canvas: *mut RustilleCanvas) {
         return;
     }
     guard_unit(|| {
-        // SAFETY: the caller guarantees this came from `Box::into_raw` here.
         drop(unsafe { Box::from_raw(canvas) });
     });
 }
@@ -587,8 +571,6 @@ unsafe fn with_canvas_mut<R>(
     if canvas.is_null() {
         return fallback;
     }
-    // SAFETY: non-null checked above; the caller guarantees the pointer is live
-    // and not aliased (the C ABI is documented as !Sync for a single canvas).
     let canvas = unsafe { &mut *canvas };
     match catch_unwind(AssertUnwindSafe(|| body(&mut canvas.inner))) {
         Ok(value) => value,
@@ -609,7 +591,6 @@ unsafe fn with_canvas<R>(
     if canvas.is_null() {
         return fallback;
     }
-    // SAFETY: non-null checked above; the caller guarantees the pointer is live.
     let canvas = unsafe { &*canvas };
     match catch_unwind(AssertUnwindSafe(|| body(&canvas.inner))) {
         Ok(value) => value,
@@ -626,7 +607,6 @@ macro_rules! canvas_dot_fn {
         /// `canvas` must be null or a live pointer from [`rustille_canvas_new`].
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $name(canvas: *mut RustilleCanvas, x: i32, y: i32) -> bool {
-            // SAFETY: forwarded unchanged; the caller upholds the contract.
             unsafe { with_canvas_mut(canvas, false, |c| c.$method(x, y)) }
         }
     };
@@ -656,7 +636,6 @@ pub unsafe extern "C" fn rustille_canvas_get(
     x: i32,
     y: i32,
 ) -> bool {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas(canvas, false, |c| c.get(x, y)) }
 }
 
@@ -667,7 +646,6 @@ pub unsafe extern "C" fn rustille_canvas_get(
 /// `canvas` must be null or a live pointer from [`rustille_canvas_new`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rustille_canvas_width(canvas: *const RustilleCanvas) -> u32 {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas(canvas, 0, Canvas::width) }
 }
 
@@ -678,7 +656,6 @@ pub unsafe extern "C" fn rustille_canvas_width(canvas: *const RustilleCanvas) ->
 /// `canvas` must be null or a live pointer from [`rustille_canvas_new`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rustille_canvas_height(canvas: *const RustilleCanvas) -> u32 {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas(canvas, 0, Canvas::height) }
 }
 
@@ -689,7 +666,6 @@ pub unsafe extern "C" fn rustille_canvas_height(canvas: *const RustilleCanvas) -
 /// `canvas` must be null or a live pointer from [`rustille_canvas_new`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rustille_canvas_count(canvas: *const RustilleCanvas) -> u32 {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas(canvas, 0, Canvas::count) }
 }
 
@@ -700,7 +676,6 @@ pub unsafe extern "C" fn rustille_canvas_count(canvas: *const RustilleCanvas) ->
 /// `canvas` must be null or a live pointer from [`rustille_canvas_new`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rustille_canvas_clear(canvas: *mut RustilleCanvas) {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas_mut(canvas, (), Canvas::clear) }
 }
 
@@ -711,7 +686,6 @@ pub unsafe extern "C" fn rustille_canvas_clear(canvas: *mut RustilleCanvas) {
 /// `canvas` must be null or a live pointer from [`rustille_canvas_new`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rustille_canvas_fill(canvas: *mut RustilleCanvas) {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas_mut(canvas, (), Canvas::fill) }
 }
 
@@ -728,7 +702,6 @@ pub unsafe extern "C" fn rustille_canvas_line(
     x1: i32,
     y1: i32,
 ) {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas_mut(canvas, (), |c| c.line(x0, y0, x1, y1)) }
 }
 
@@ -745,7 +718,6 @@ pub unsafe extern "C" fn rustille_canvas_rectangle(
     x1: i32,
     y1: i32,
 ) {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas_mut(canvas, (), |c| c.rectangle(x0, y0, x1, y1)) }
 }
 
@@ -762,7 +734,6 @@ pub unsafe extern "C" fn rustille_canvas_filled_rectangle(
     x1: i32,
     y1: i32,
 ) {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas_mut(canvas, (), |c| c.filled_rectangle(x0, y0, x1, y1)) }
 }
 
@@ -778,7 +749,6 @@ pub unsafe extern "C" fn rustille_canvas_circle(
     cy: i32,
     radius: i32,
 ) {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas_mut(canvas, (), |c| c.circle(cx, cy, radius)) }
 }
 
@@ -794,7 +764,6 @@ pub unsafe extern "C" fn rustille_canvas_filled_circle(
     cy: i32,
     radius: i32,
 ) {
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe { with_canvas_mut(canvas, (), |c| c.filled_circle(cx, cy, radius)) }
 }
 
@@ -814,7 +783,6 @@ pub unsafe extern "C" fn rustille_canvas_render(
     if canvas.is_null() || out.is_null() {
         return RustilleStatus::NullPointer;
     }
-    // SAFETY: forwarded unchanged; the caller upholds the contract.
     unsafe {
         with_canvas(canvas, RustilleStatus::Panic, |c| {
             deliver(Ok(c.render()), out)

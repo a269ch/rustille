@@ -59,7 +59,6 @@ pub fn ansi256_index(r: u8, g: u8, b: u8) -> u8 {
     let cube_error = squared_distance([r, g, b], cube_rgb);
     let cube_code = 16 + 36 * ri + 6 * gi + bi;
 
-    // Grey ramp: entry 232 + i has the value 8 + 10 * i.
     let grey = luminance(r, g, b).round().clamp(0.0, 255.0) as i32;
     let step = ((grey - 8) as f32 / 10.0).round().clamp(0.0, 23.0) as u8;
     let grey_value = 8 + 10 * step;
@@ -68,7 +67,6 @@ pub fn ansi256_index(r: u8, g: u8, b: u8) -> u8 {
     if grey_error < cube_error {
         232 + step
     } else {
-        // INVARIANT: 16 + 36*5 + 6*5 + 5 == 231, so this always fits in a u8.
         cube_code as u8
     }
 }
@@ -113,9 +111,7 @@ pub(crate) fn push_foreground(out: &mut String, mode: ColorMode, rgb: [u8; 3]) {
 pub(crate) const fn escape_budget(mode: ColorMode) -> usize {
     match mode {
         ColorMode::None => 0,
-        // ESC [ 3 8 ; 5 ; n n n m
         ColorMode::Ansi256 => 11,
-        // ESC [ 3 8 ; 2 ; r r r ; g g g ; b b b m
         ColorMode::TrueColor => 19,
     }
 }
@@ -143,7 +139,6 @@ mod tests {
 
     #[test]
     fn ansi256_prefers_the_grey_ramp_for_greys() {
-        // 0x77 is far from every cube level but close to grey ramp entry 11.
         let index = ansi256_index(0x77, 0x77, 0x77);
         assert!((232..=255).contains(&index), "got {index}");
     }

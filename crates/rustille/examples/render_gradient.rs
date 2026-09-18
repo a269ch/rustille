@@ -11,7 +11,6 @@ fn main() -> Result<(), rustille::Error> {
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
     for y in 0..height {
         for x in 0..width {
-            // A radial gradient, fully opaque.
             let dx = f64::from(x) - f64::from(width) / 2.0;
             let dy = f64::from(y) - f64::from(height) / 2.0;
             let distance = (dx * dx + dy * dy).sqrt() / f64::from(width / 2);

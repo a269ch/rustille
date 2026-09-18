@@ -124,8 +124,6 @@ fn render_file(
         fit,
         cell_aspect_ratio,
     )?;
-    // Rendering is pure CPU work with no Python objects involved, so other
-    // threads may run meanwhile.
     py.detach(|| Renderer::new(options).render_file(path))
         .map_err(to_py_error)
 }

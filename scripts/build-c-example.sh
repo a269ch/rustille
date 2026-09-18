@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Builds the C ABI, generates the header, then compiles and runs the C example
-# against both the static and the shared library.
-#
-# Usage: scripts/build-c-example.sh [debug|release]
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

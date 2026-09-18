@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Generates bindings/c/include/rustille.h with cbindgen.
-#
-# The header is derived from bindings/c/src/lib.rs and is therefore not
-# committed; run this (or `just c-header`) before building a C consumer.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

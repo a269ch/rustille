@@ -1,9 +1,3 @@
-# cargo-deny configuration.
-#
-#   cargo deny --workspace check
-#
-# CI runs advisories, licences, bans and sources on every pull request.
-
 [graph]
 all-features = true
 
@@ -14,7 +8,6 @@ ignore = []
 
 [licenses]
 version = 2
-# Everything Rustille depends on must be usable under MIT OR Apache-2.0.
 allow = [
     "MIT",
     "Apache-2.0",
@@ -35,8 +28,6 @@ unused-allowed-license = "allow"
 multiple-versions = "warn"
 wildcards = "deny"
 allow-wildcard-paths = true
-# Rustille's own dependency tree should stay small; flag anything heavy that
-# sneaks in through a default feature.
 deny = []
 
 [sources]

@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-# Assembles the C ABI release bundle for one target:
-#
-#   include/rustille.h
-#   lib/librustille.{so,dylib,dll} and librustille.a
-#   lib/pkgconfig/rustille.pc
-#   lib/cmake/rustille/rustille-config.cmake
-#   LICENSE-MIT, LICENSE-APACHE, README.md
-#
-# Usage: scripts/package-c.sh <target-triple> [output-dir]
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -46,7 +37,6 @@ cp "$root/target/rustille.h" "$staging/include/rustille.h"
 built="$root/target/$target/release"
 artifacts=("$shared" "$static")
 if [[ "$target" == *-windows-* ]]; then
-    # MSVC needs the import library to link against the DLL.
     artifacts+=("rustille.dll.lib")
 fi
 for artifact in "${artifacts[@]}"; do
@@ -73,11 +63,8 @@ cp "$root/LICENSE-MIT" "$root/LICENSE-APACHE" "$staging/"
 cp "$root/bindings/c/examples/demo.c" "$staging/example.c"
 
 cat >"$staging/README.md" <<EOF
-# Rustille C ABI $version ($target)
 
 Turn pixels into Braille, from any language that can call C.
-
-    #include <rustille.h>
 
     RustilleOptions options;
     rustille_options_init(&options);
@@ -89,20 +76,15 @@ Turn pixels into Braille, from any language that can call C.
         rustille_string_free(art);
     }
 
-## Layout
-
     include/rustille.h                            the header
     lib/$shared            shared library
     lib/$static            static library
     lib/pkgconfig/rustille.pc                     pkg-config metadata
     lib/cmake/rustille/rustille-config.cmake      CMake package config
 
-## Installing
-
 Copy the tree over a prefix such as /usr/local, then:
 
     pkg-config --cflags --libs rustille
-    # or, in CMake:
     find_package(rustille REQUIRED)
     target_link_libraries(my_app PRIVATE rustille::rustille)
 

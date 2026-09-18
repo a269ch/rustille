@@ -1,14 +1,11 @@
-# Rust
 /target/
 **/target/
 *.pdb
 
-# Generated C artifacts
 /bindings/c/include/
 /bindings/c/rustille.pc
 /dist/
 
-# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -20,7 +17,6 @@ venv/
 /bindings/python/python/rustille/*.pyd
 /bindings/python/python/rustille/*.dylib
 
-# Node
 node_modules/
 /bindings/node/*.node
 /bindings/node/index.js
@@ -28,10 +24,8 @@ node_modules/
 /bindings/node/npm/
 *.tgz
 
-# WASM
 /bindings/wasm/pkg/
 
-# Editors / OS
 .idea/
 .vscode/
 .DS_Store
