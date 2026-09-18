@@ -54,7 +54,11 @@ jobs:
         shell: bash
         run: |
           cargo build -p rustille --features cli --locked
-          cargo run -p rustille --features cli --locked --example render_gradient | head -5
+          # Not piped into `head`: the example would die on SIGPIPE and,
+          # under `bash -o pipefail`, take the job down with it.
+          cargo run -p rustille --features cli --locked --example render_gradient > gradient.txt
+          head -5 gradient.txt
+          rm gradient.txt
 
       - name: Working tree is clean
         shell: bash

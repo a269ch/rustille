@@ -41,7 +41,7 @@ assert.throws(() => rustille.renderRgba(new Uint8Array(3), 2, 2));
 if (typeof rustille.renderBytes === "function") {
   const png = Buffer.from(
     // A 1x1 opaque white PNG.
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAABubagXAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP4DwQACfsD/Wj6HMwAAAAASUVORK5CYII=",
     "base64",
   );
   const decoded = rustille.renderBytes(png, { width: 1, height: 1, fit: "stretch" });

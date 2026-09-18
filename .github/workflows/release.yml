@@ -502,6 +502,10 @@ jobs:
     permissions:
       # Short-lived OIDC credentials instead of a stored token.
       id-token: write
+    env:
+      # The `secrets` context is not available in a step-level `if`, so the
+      # bootstrap token is hoisted here and the step tests `env` instead.
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -512,12 +516,12 @@ jobs:
       # Publisher is configured; see RELEASING.md.
       - name: Mint a short-lived crates.io token (Trusted Publishing)
         id: auth
-        if: ${{ !secrets.CARGO_REGISTRY_TOKEN }}
+        if: env.CARGO_REGISTRY_TOKEN == ''
         uses: rust-lang/crates-io-auth-action@v1
 
       - name: Publish the rustille crate
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ env.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
         # Only `rustille` is published. rustille-capi, rustille-python,
         # rustille-node and rustille-wasm are all `publish = false`.
         run: cargo publish -p rustille --all-features --locked
