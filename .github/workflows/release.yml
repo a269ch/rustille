@@ -46,6 +46,7 @@ jobs:
         run: |
           cargo package -p rustille --all-features --locked --list
           cargo publish --dry-run -p rustille --all-features --locked
+          cargo package -p rustille --all-features --locked
 
       - name: Upload the verified .crate for inspection
         uses: actions/upload-artifact@v4
