@@ -24,10 +24,12 @@ use crate::error::{Error, Result};
 
 /// Largest canvas Rustille will allocate, in character cells.
 ///
-/// One cell is one byte, so this caps a canvas at 256 MiB — roughly a
-/// 32,768 × 65,536 dot surface. Anything larger is rejected with
+/// One cell is one byte, so this caps a canvas at 16 MiB — roughly a
+/// 8,192 × 16,384 dot surface. Anything larger is rejected with
 /// [`Error::InvalidDimensions`] rather than aborting on allocation failure.
-pub const MAX_CANVAS_CELLS: u64 = 1 << 28;
+/// This acts as a safeguard against accidental or malicious memory exhaustion
+/// (e.g. over web APIs or FFI boundaries).
+pub const MAX_CANVAS_CELLS: u64 = 1 << 24;
 
 /// A fixed-size grid of Braille dots.
 #[derive(Clone, PartialEq, Eq)]
@@ -247,8 +249,8 @@ impl Canvas {
     }
 
     fn plot_line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, value: bool) {
-        let dx = (x1 - x0).abs();
-        let dy = -(y1 - y0).abs();
+        let dx = (i64::from(x1) - i64::from(x0)).abs();
+        let dy = -(i64::from(y1) - i64::from(y0)).abs();
         let step_x = if x0 < x1 { 1 } else { -1 };
         let step_y = if y0 < y1 { 1 } else { -1 };
         let mut error = dx + dy;
