@@ -280,7 +280,8 @@ fn pack_cells(
 fn cover_crop(surface: &Surface, cells_width: u32, cells_height: u32, cell_aspect: f32) -> Surface {
     let box_aspect = f64::from(cells_width) / (f64::from(cells_height) * f64::from(cell_aspect));
     let source_aspect = f64::from(surface.width()) / f64::from(surface.height());
-    if (source_aspect - box_aspect).abs() < 1e-9 {
+    // Use a small epsilon to handle precision issues
+    if (source_aspect - box_aspect).abs() < 1e-6 {
         return surface.clone();
     }
     if source_aspect > box_aspect {

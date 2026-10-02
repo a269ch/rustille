@@ -401,9 +401,11 @@ impl RenderOptions {
         if self.height == Some(0) {
             return Err(Error::invalid_options("height must be greater than zero"));
         }
-        if !self.cell_aspect_ratio.is_finite() || self.cell_aspect_ratio <= 0.0 {
+        // Prevent extremely small values that could cause division by zero or infinities
+        // during rendering size calculations.
+        if !self.cell_aspect_ratio.is_finite() || self.cell_aspect_ratio <= 1e-6 {
             return Err(Error::invalid_options(format!(
-                "cell_aspect_ratio must be a positive finite number, got {}",
+                "cell_aspect_ratio must be a positive finite number >= 1e-6, got {}",
                 self.cell_aspect_ratio
             )));
         }
